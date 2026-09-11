@@ -318,15 +318,54 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   // pelos pinos das divisórias. Toca a cada troca de casa sob o ponteiro
   // (onCurrentIndexChange do spin-wheel), só enquanto a roleta está girando.
   var audioCtx = null;
+
+  // Som do resultado: win.mp3 para casas WIN, fail.mp3 para RETRY e FAIL.
+  var somWin  = new Audio('win.mp3');
+  var somFail = new Audio('fail.mp3');
+  somWin.preload = somFail.preload = 'auto';
+  var somesDesbloqueados = false;
+
   function prepararAudio(){
     try {
       if (!audioCtx){
         var AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        audioCtx = new AC();
+        if (AC) audioCtx = new AC();
       }
-      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     } catch (e) { /* Web Audio indisponível: roleta segue funcionando sem som */ }
+
+    if (!somesDesbloqueados){
+      somesDesbloqueados = true;
+      [somWin, somFail].forEach(function(a){
+        a.play().then(function(){ a.pause(); a.currentTime = 0; }).catch(function(){});
+      });
+    }
+  }
+
+  // O SPIN só é liberado de novo quando o som do resultado termina de tocar
+  // (ou imediatamente, se o áudio falhar/for bloqueado — pra não travar o botão).
+  function tocarSomResultado(gi){
+    var g = gi>=0 ? grupos[gi] : null;
+    if (!g){ elSpin.disabled = false; return; }
+
+    var som = g.tipo === 'WIN' ? somWin : somFail;
+
+    function liberar(){
+      som.removeEventListener('ended', liberar);
+      som.removeEventListener('error', liberar);
+      elSpin.disabled = false;
+    }
+
+    try {
+      som.pause();
+      som.currentTime = 0;
+      som.addEventListener('ended', liberar);
+      som.addEventListener('error', liberar);
+      var p = som.play();
+      if (p && typeof p.catch === 'function') p.catch(liberar);
+    } catch (e) {
+      liberar();
+    }
   }
 
   function tocarTique(){
@@ -374,12 +413,12 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
     onCurrentIndexChange: tocarTique,
     onRest: function(e){
       girando = false;
-      elSpin.disabled = false;
       elStage.classList.remove('spinning');
       var gi = itens[e.currentIndex] ? itens[e.currentIndex].grupo : -1;
       registrar(gi, 1);
       mostrar(e.currentIndex);
       desenharTally();
+      tocarSomResultado(gi); // reabilita o SPIN quando o som terminar
     }
   });
 
