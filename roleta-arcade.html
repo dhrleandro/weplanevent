@@ -314,6 +314,50 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
     return out;
   }
 
+  // Som do pino: sintetizado no navegador (Web Audio API), sem arquivo de áudio.
+  // Um estouro curto de ruído filtrado imita o "tique" do ponteiro passando
+  // pelos pinos das divisórias. Toca a cada troca de casa sob o ponteiro
+  // (onCurrentIndexChange do spin-wheel), só enquanto a roleta está girando.
+  var audioCtx = null;
+  function prepararAudio(){
+    try {
+      if (!audioCtx){
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) { /* Web Audio indisponível: roleta segue funcionando sem som */ }
+  }
+
+  function tocarTique(){
+    if (!girando || !audioCtx) return;
+    var t = audioCtx.currentTime;
+    var dur = 0.025;
+    var n = Math.max(1, Math.round(audioCtx.sampleRate * dur));
+    var buffer = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
+    var dados = buffer.getChannelData(0);
+    for (var i=0; i<n; i++){
+      dados[i] = (Math.random()*2 - 1) * Math.pow(1 - i/n, 2);
+    }
+    var ruido = audioCtx.createBufferSource();
+    ruido.buffer = buffer;
+
+    var filtro = audioCtx.createBiquadFilter();
+    filtro.type = 'highpass';
+    filtro.frequency.value = 2200;
+
+    var ganho = audioCtx.createGain();
+    ganho.gain.setValueAtTime(0.55, t);
+    ganho.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+    ruido.connect(filtro);
+    filtro.connect(ganho);
+    ganho.connect(audioCtx.destination);
+    ruido.start(t);
+    ruido.stop(t + dur);
+  }
+
   var wheel = new Wheel(document.getElementById('wheel'), {
     items: [],
     borderColor:'#FFFFFF',
@@ -328,6 +372,7 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
     itemLabelFontSizeMax: 22,
     itemLabelStrokeColor:'rgba(0,0,0,.35)',
     itemLabelStrokeWidth: 1,
+    onCurrentIndexChange: tocarTique,
     onRest: function(e){
       girando = false;
       elSpin.disabled = false;
@@ -521,6 +566,7 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
     elSpin.disabled = true;
     elStage.classList.add('spinning');
     elVerdict.innerHTML = '<span>Girando…</span>';
+    prepararAudio();
     wheel.spinToItem(v, reduzido ? 900 : 5200, false, reduzido ? 1 : 6, 1, easeOutQuint);
   });
 
