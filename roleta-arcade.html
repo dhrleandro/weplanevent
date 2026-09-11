@@ -178,6 +178,18 @@
   @media (prefers-reduced-motion:reduce){
     .stage.spinning .spoke::before{animation:none}
   }
+
+  #confete{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:9999}
+  #confete i{
+    position:absolute;top:-12px;display:block;border-radius:1px;
+    animation:cair linear forwards;
+  }
+  @keyframes cair{
+    to{ transform:translateY(105vh) rotate(var(--giro)); }
+  }
+  @media (prefers-reduced-motion:reduce){
+    #confete{display:none}
+  }
 </style>
 
 <div class="page">
@@ -564,12 +576,41 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
 
   var PREFIXO_TIPO = {WIN:'🎉 ', RETRY:'🔁 ', FAIL:''};
 
+  var CORES_CONFETE = ['#F5C542','#FF6B6B','#4ECDC4','#95E06C','#C084FC','#FF9F45'];
+
+  function soltarConfete(){
+    var container = document.getElementById('confete');
+    if (!container){
+      container = document.createElement('div');
+      container.id = 'confete';
+      document.body.appendChild(container);
+    }
+    var qtd = 120;
+    for (var i=0; i<qtd; i++){
+      var p = document.createElement('i');
+      var largura = 6 + Math.random()*6;
+      var altura = largura * (0.4 + Math.random()*0.8);
+      p.style.left = (Math.random()*100) + 'vw';
+      p.style.width = largura + 'px';
+      p.style.height = altura + 'px';
+      p.style.background = CORES_CONFETE[Math.floor(Math.random()*CORES_CONFETE.length)];
+      p.style.setProperty('--giro', (360 + Math.random()*720) + 'deg');
+      p.style.animationDuration = (2.2 + Math.random()*1.6) + 's';
+      p.style.animationDelay = (Math.random()*0.4) + 's';
+      container.appendChild(p);
+      (function(el){
+        el.addEventListener('animationend', function(){ el.remove(); });
+      })(p);
+    }
+  }
+
   function mostrar(wheelIndex){
     var gi = itens[wheelIndex] ? itens[wheelIndex].grupo : -1;
     var g = gi>=0 ? grupos[gi] : null;
     elVerdict.innerHTML = '<b></b><span></span>';
     elVerdict.querySelector('b').textContent = g ? ((PREFIXO_TIPO[g.tipo] || '') + (g.nome || 'sem nome')) : '—';
     elVerdict.querySelector('span').textContent = gi>=0 ? 'chance configurada: ' + fmt(chance(gi)*100, 2) + '%' : '';
+    if (g && g.tipo === 'WIN') soltarConfete();
   }
 
   function desenharItens(){
