@@ -118,6 +118,7 @@
   .headrow .b{width:62px;text-align:right;flex:none}
   .headrow .c{width:54px;text-align:right;flex:none}
   .headrow .d{width:26px;flex:none}
+  .headrow .e{width:66px;text-align:right;flex:none}
 
   .row{display:flex;gap:7px;align-items:center;margin-bottom:7px}
   .swatch{width:12px;height:25px;border-radius:3px;flex:none}
@@ -127,6 +128,7 @@
   }
   .row input[type=text]{flex:1 1 auto;min-width:0}
   .row input[type=number]{width:62px;flex:none;text-align:right;font-variant-numeric:tabular-nums}
+  .row input[type=number].qtd{width:66px}
   .row input:focus{outline:2px solid #7FD1FF;outline-offset:0}
   .pct{width:54px;flex:none;text-align:right;font-size:.82rem;color:var(--gold);font-variant-numeric:tabular-nums}
   button{font:inherit;cursor:pointer;border-radius:7px}
@@ -189,8 +191,8 @@
 
   <section>
     <h2>Casas e chances</h2>
-    <p class="note">Peso relativo. Todas as fatias têm o mesmo tamanho na tela, mas cada uma sai com a chance que você definir.</p>
-    <div class="headrow"><div class="a">Casa</div><div class="b">Peso</div><div class="c">Chance</div><div class="d"></div></div>
+    <p class="note">Peso relativo e quantidade de casas iguais. Ex.: peso 1 e quantidade 17 cria 17 casas idênticas na roleta sem precisar repetir a linha. Todas as fatias têm o mesmo tamanho na tela, mas cada uma sai com a chance que você definir.</p>
+    <div class="headrow"><div class="a">Casa</div><div class="b">Peso</div><div class="e">Qtd</div><div class="c">Chance</div><div class="d"></div></div>
     <div id="items"></div>
     <button class="add" id="add">Adicionar casa</button>
     <label class="check">
@@ -245,24 +247,16 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   var PALETTE = ['#E24A9E','#8CC63F','#2AA9E0','#A93FD1','#F2B01E','#E03127','#37C2A6'];
   var ON_DARK = ['#FFFFFF','#1B3A05','#FFFFFF','#FFFFFF','#4A3200','#FFFFFF','#053029'];
 
-  var itens = [
-    {nome:'50 moedas',      peso:180},
-    {nome:'75 moedas',      peso:170},
-    {nome:'100 moedas',     peso:160},
-    {nome:'150 moedas',     peso:140},
-    {nome:'250 moedas',     peso:110},
-    {nome:'500 moedas',     peso:80},
-    {nome:'1.000 moedas',   peso:50},
-    {nome:'Raspadinha',     peso:40},
-    {nome:'2.500 moedas',   peso:30},
-    {nome:'Caixa rara',     peso:20},
-    {nome:'5.000 moedas',   peso:12},
-    {nome:'Caixa épica',    peso:6},
-    {nome:'25.000 moedas',  peso:1.5},
-    {nome:'Caixa lendária', peso:0.5}
+  // Cada grupo vira "qtd" casas físicas na roleta, todas com o mesmo peso.
+  // 20 casas no total → chance do Brinde = 1/20 (5%) exata.
+  var grupos = [
+    {nome:'Tente outra vez', peso:1, qtd:2},
+    {nome:'Brinde',          peso:1, qtd:1},
+    {nome:'Sem prêmio',      peso:1, qtd:17}
   ];
 
-  var contagem = [];
+  var itens = [];    // casas físicas expandidas a partir de grupos (1 por fatia da roleta)
+  var contagem = []; // contagem por grupo
   var girando = false;
   var reduzido = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -277,9 +271,48 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   var elCounter = document.getElementById('counter');
 
   function easeOutQuint(n){ return 1 - Math.pow(1 - n, 5); }
-  function total(){ return itens.reduce(function(s,i){ return s + (i.peso>0?i.peso:0); },0); }
-  function chance(i){ var t=total(); return t>0 ? (itens[i].peso>0?itens[i].peso:0)/t : 0; }
+  function pesoGrupo(g){ return (g.peso>0?g.peso:0) * (g.qtd>0?Math.round(g.qtd):0); }
+  function total(){ return grupos.reduce(function(s,g){ return s + pesoGrupo(g); },0); }
+  function chance(i){ var t=total(); return t>0 ? pesoGrupo(grupos[i])/t : 0; }
   function fmt(n,d){ return n.toFixed(d).replace('.',','); }
+
+  // Grupos com identidade própria (ex.: Brinde, Tente outra vez) mantêm uma cor
+  // fixa da paleta. Só o grupo "Sem prêmio" recebe cores aleatórias por casa —
+  // como todas as casas dão o mesmo resultado (nada), variar a cor evita o bloco
+  // monótono de uma cor só sem prejudicar o reconhecimento dos outros prêmios.
+  // A cor de cada casa é gerada uma vez e fica estável entre redesenhos; só muda
+  // se a quantidade de casas do grupo mudar.
+  function ehGrupoSemPremio(g){
+    var n = (g.nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+    return n === 'sem premio';
+  }
+
+  function coresParaGrupo(g, gi){
+    var q = g.qtd>0 ? Math.round(g.qtd) : 0;
+    if (q <= 1 || !ehGrupoSemPremio(g)) return null;
+    if (!g._cores) g._cores = [];
+    while (g._cores.length < q){
+      var idx = Math.floor(Math.random() * PALETTE.length);
+      if (PALETTE.length > 1 && g._cores.length > 0 && PALETTE[idx] === g._cores[g._cores.length - 1]){
+        idx = (idx + 1) % PALETTE.length;
+      }
+      g._cores.push(PALETTE[idx]);
+    }
+    g._cores.length = q;
+    return g._cores;
+  }
+
+  function expandirGrupos(){
+    var out = [];
+    grupos.forEach(function(g, gi){
+      var q = g.qtd>0 ? Math.round(g.qtd) : 0;
+      var cores = coresParaGrupo(g, gi);
+      for (var k=0; k<q; k++){
+        out.push({nome:g.nome, peso:(g.peso>0?g.peso:0), grupo:gi, cor: cores ? cores[k] : PALETTE[gi % PALETTE.length]});
+      }
+    });
+    return out;
+  }
 
   var wheel = new Wheel(document.getElementById('wheel'), {
     items: [],
@@ -299,7 +332,8 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
       girando = false;
       elSpin.disabled = false;
       elStage.classList.remove('spinning');
-      registrar(e.currentIndex, 1);
+      var gi = itens[e.currentIndex] ? itens[e.currentIndex].grupo : -1;
+      registrar(gi, 1);
       mostrar(e.currentIndex);
       desenharTally();
     }
@@ -319,18 +353,25 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
 
   function sincronizarRoleta(){
     var prop = elProp.checked;
-    wheel.items = itens.map(function(it, i){
+    itens = expandirGrupos();
+    wheel.items = itens.map(function(it){
+      var pi = PALETTE.indexOf(it.cor);
       return {
         label: it.nome || ' ',
         weight: prop ? Math.max(it.peso, 0.0001) : 1,
-        backgroundColor: PALETTE[i % PALETTE.length],
-        labelColor: ON_DARK[i % ON_DARK.length]
+        backgroundColor: it.cor,
+        labelColor: ON_DARK[pi >= 0 ? pi % ON_DARK.length : it.grupo % ON_DARK.length]
       };
     });
   }
 
+  function corRepresentativa(g, gi){
+    return (g._cores && g._cores.length) ? g._cores[0] : PALETTE[gi % PALETTE.length];
+  }
+
   function sortear(){
-    var t = total();
+    if (itens.length === 0) return -1;
+    var t = itens.reduce(function(s,i){ return s + (i.peso>0?i.peso:0); }, 0);
     if (t <= 0) return -1;
     var r = Math.random() * t;
     for (var i=0; i<itens.length; i++){
@@ -340,47 +381,65 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
     return itens.length - 1;
   }
 
-  function registrar(i, n){
-    while (contagem.length < itens.length) contagem.push(0);
-    if (i>=0 && i<contagem.length) contagem[i] += n;
+  function registrar(gi, n){
+    while (contagem.length < grupos.length) contagem.push(0);
+    if (gi>=0 && gi<contagem.length) contagem[gi] += n;
   }
 
-  function mostrar(i){
+  function mostrar(wheelIndex){
+    var gi = itens[wheelIndex] ? itens[wheelIndex].grupo : -1;
     elVerdict.innerHTML = '<b></b><span></span>';
-    elVerdict.querySelector('b').textContent = itens[i] ? (itens[i].nome || 'sem nome') : '—';
-    elVerdict.querySelector('span').textContent = 'chance configurada: ' + fmt(chance(i)*100, 2) + '%';
+    elVerdict.querySelector('b').textContent = gi>=0 ? (grupos[gi].nome || 'sem nome') : '—';
+    elVerdict.querySelector('span').textContent = gi>=0 ? 'chance configurada: ' + fmt(chance(gi)*100, 2) + '%' : '';
   }
 
   function desenharItens(){
     elItems.innerHTML = '';
-    itens.forEach(function(it, i){
+    grupos.forEach(function(g, i){
       var row = document.createElement('div');
       row.className = 'row';
 
+      coresParaGrupo(g, i);
       var sw = document.createElement('div');
       sw.className = 'swatch';
-      sw.style.background = PALETTE[i % PALETTE.length];
+      sw.style.background = corRepresentativa(g, i);
 
       var nome = document.createElement('input');
       nome.type = 'text';
-      nome.value = it.nome;
+      nome.value = g.nome;
       nome.setAttribute('aria-label','Nome da casa ' + (i+1));
       nome.addEventListener('input', function(){
-        it.nome = nome.value;
+        g.nome = nome.value;
         sincronizarRoleta();
+        desenharLampadas();
         desenharTally();
       });
 
       var peso = document.createElement('input');
       peso.type = 'number';
       peso.min = '0'; peso.step = '0.5';
-      peso.value = it.peso;
+      peso.value = g.peso;
       peso.setAttribute('aria-label','Peso da casa ' + (i+1));
       peso.addEventListener('input', function(){
         var v = parseFloat(peso.value);
-        it.peso = isNaN(v) ? 0 : Math.max(v, 0);
+        g.peso = isNaN(v) ? 0 : Math.max(v, 0);
         atualizarPercentuais();
         sincronizarRoleta();
+        desenharTally();
+      });
+
+      var qtd = document.createElement('input');
+      qtd.type = 'number';
+      qtd.className = 'qtd';
+      qtd.min = '0'; qtd.step = '1';
+      qtd.value = g.qtd;
+      qtd.setAttribute('aria-label','Quantidade de casas iguais a ' + (g.nome || ('casa ' + (i+1))));
+      qtd.addEventListener('input', function(){
+        var v = parseInt(qtd.value, 10);
+        g.qtd = isNaN(v) ? 0 : Math.max(v, 0);
+        atualizarPercentuais();
+        sincronizarRoleta();
+        desenharLampadas();
         desenharTally();
       });
 
@@ -391,16 +450,16 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
       kill.className = 'kill';
       kill.type = 'button';
       kill.textContent = '×';
-      kill.setAttribute('aria-label','Remover casa ' + (i+1));
-      kill.disabled = itens.length <= 2;
+      kill.setAttribute('aria-label','Remover grupo ' + (i+1));
+      kill.disabled = grupos.length <= 2;
       kill.addEventListener('click', function(){
-        if (girando || itens.length <= 2) return;
-        itens.splice(i,1);
+        if (girando || grupos.length <= 2) return;
+        grupos.splice(i,1);
         contagem.splice(i,1);
         redesenharTudo();
       });
 
-      row.append(sw, nome, peso, pct, kill);
+      row.append(sw, nome, peso, qtd, pct, kill);
       elItems.append(row);
     });
     atualizarPercentuais();
@@ -414,20 +473,21 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   }
 
   function desenharTally(){
-    while (contagem.length < itens.length) contagem.push(0);
+    while (contagem.length < grupos.length) contagem.push(0);
     var giros = contagem.reduce(function(a,b){ return a+b; },0);
     elTally.innerHTML = '';
 
-    itens.forEach(function(it, i){
+    grupos.forEach(function(g, i){
       var esp = chance(i), obt = giros>0 ? contagem[i]/giros : 0;
       var tr = document.createElement('tr');
 
       var td0 = document.createElement('td');
       var bar = document.createElement('span');
       bar.className = 'bar';
-      bar.style.background = PALETTE[i % PALETTE.length];
+      bar.style.background = corRepresentativa(g, i);
       bar.style.width = Math.max(2, Math.round(obt*44)) + 'px';
-      td0.append(bar, document.createTextNode(it.nome || 'sem nome'));
+      var rotulo = (g.nome || 'sem nome') + (g.qtd>1 ? ' (' + g.qtd + '×)' : '');
+      td0.append(bar, document.createTextNode(rotulo));
 
       var td1 = document.createElement('td'); td1.textContent = fmt(esp*100,2) + '%';
       var td2 = document.createElement('td'); td2.textContent = giros>0 ? fmt(obt*100,2)+'%' : '—';
@@ -445,8 +505,8 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
 
   function redesenharTudo(){
     desenharItens();
-    desenharLampadas();
     sincronizarRoleta();
+    desenharLampadas();
     desenharTally();
   }
 
@@ -454,7 +514,7 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
     if (girando) return;
     var v = sortear();
     if (v < 0){
-      elVerdict.innerHTML = '<span>Defina um peso maior que zero em pelo menos uma casa.</span>';
+      elVerdict.innerHTML = '<span>Defina um peso e uma quantidade maior que zero em pelo menos um grupo.</span>';
       return;
     }
     girando = true;
@@ -466,19 +526,23 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
 
   document.getElementById('add').addEventListener('click', function(){
     if (girando) return;
-    itens.push({nome:'Casa ' + (itens.length+1), peso:10});
+    grupos.push({nome:'Casa ' + (grupos.length+1), peso:1, qtd:1});
     contagem.push(0);
     redesenharTudo();
   });
 
   document.getElementById('sim').addEventListener('click', function(){
     if (total() <= 0) return;
-    for (var n=0; n<10000; n++) registrar(sortear(), 1);
+    for (var n=0; n<10000; n++){
+      var idx = sortear();
+      var gi = itens[idx] ? itens[idx].grupo : -1;
+      registrar(gi, 1);
+    }
     desenharTally();
   });
 
   document.getElementById('reset').addEventListener('click', function(){
-    contagem = itens.map(function(){ return 0; });
+    contagem = grupos.map(function(){ return 0; });
     desenharTally();
   });
 
