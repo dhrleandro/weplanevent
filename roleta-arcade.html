@@ -227,7 +227,7 @@
 }
 
 <span class="c">// a roleta só anima até quem já ganhou</span>
-wheel.spinToItem(sortear(itens), 5200, <span class="k">false</span>, 6, 1, easeOut);</pre>
+wheel.spinToItem(sortear(itens), 5200, <span class="k">true</span>, 6, 1, easeOut);</pre>
   </section>
 
   <footer>spin-wheel 5.0.2 (MIT) embutido nesta página · arte original, sem assets de terceiros</footer>
@@ -624,7 +624,7 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
     elStage.classList.add('spinning');
     elVerdict.innerHTML = '<span>Girando…</span>';
     prepararAudio();
-    wheel.spinToItem(v, reduzido ? 900 : 5200, false, reduzido ? 1 : 6, 1, easeOutQuint);
+    wheel.spinToItem(v, reduzido ? 900 : 5200, true, reduzido ? 1 : 6, 1, easeOutQuint);
   });
 
   document.getElementById('add').addEventListener('click', function(){
