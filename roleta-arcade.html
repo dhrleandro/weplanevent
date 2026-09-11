@@ -114,7 +114,7 @@
   .note{color:var(--muted);font-size:.8rem;margin:0 0 13px}
 
   .headrow{display:flex;gap:7px;font-size:.7rem;color:var(--muted);margin-bottom:6px}
-  .headrow .a{flex:1 1 auto;padding-left:19px}
+  .headrow .a{flex:1 1 auto;padding-left:27px}
   .headrow .b{width:62px;text-align:right;flex:none}
   .headrow .c{width:54px;text-align:right;flex:none}
   .headrow .d{width:26px;flex:none}
@@ -122,7 +122,7 @@
   .headrow .f{width:78px;flex:none}
 
   .row{display:flex;gap:7px;align-items:center;margin-bottom:7px}
-  .swatch{width:12px;height:25px;border-radius:3px;flex:none}
+  .swatch{width:20px;height:25px;border-radius:3px;flex:none}
   .row input, .row select{
     font:inherit;font-size:.87rem;padding:6px 8px;border-radius:6px;
     border:1px solid var(--hair);background:#1B1F2B;color:var(--ink);
@@ -131,6 +131,10 @@
   .row input[type=number]{width:62px;flex:none;text-align:right;font-variant-numeric:tabular-nums}
   .row input[type=number].qtd{width:66px}
   .row select.tipo{width:78px;flex:none}
+  .row input.swatch{padding:0;background:none;cursor:pointer}
+  .row input.swatch::-webkit-color-swatch-wrapper{padding:0}
+  .row input.swatch::-webkit-color-swatch{border:none;border-radius:3px}
+  .row input.swatch::-moz-color-swatch{border:none;border-radius:3px}
   .row input:focus, .row select:focus{outline:2px solid #7FD1FF;outline-offset:0}
   .pct{width:54px;flex:none;text-align:right;font-size:.82rem;color:var(--gold);font-variant-numeric:tabular-nums}
   button{font:inherit;cursor:pointer;border-radius:7px}
@@ -193,7 +197,7 @@
 
   <section>
     <h2>Casas e chances</h2>
-    <p class="note">Peso relativo e quantidade de casas iguais. Ex.: peso 1 e quantidade 17 cria 17 casas idênticas na roleta sem precisar repetir a linha. Tipo define se a casa é prêmio (WIN), tente outra vez (RETRY) ou sem prêmio (FAIL). Todas as fatias têm o mesmo tamanho na tela, mas cada uma sai com a chance que você definir.</p>
+    <p class="note">Peso relativo e quantidade de casas iguais. Ex.: peso 1 e quantidade 17 cria 17 casas idênticas na roleta sem precisar repetir a linha. Tipo define se a casa é prêmio (WIN), tente outra vez (RETRY) ou sem prêmio (FAIL). Todas as fatias têm o mesmo tamanho na tela, mas cada uma sai com a chance que você definir. A cor de casas WIN e RETRY pode ser escolhida no quadrado ao lado do nome; casas FAIL recebem cores automáticas, sempre diferentes entre si.</p>
     <div class="headrow"><div class="a">Casa</div><div class="f">Tipo</div><div class="b">Peso</div><div class="e">Qtd</div><div class="c">Chance</div><div class="d"></div></div>
     <div id="items"></div>
     <button class="add" id="add">Adicionar casa</button>
@@ -247,15 +251,17 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   var Wheel = spinWheel.Wheel;
 
   var PALETTE = ['#E24A9E','#8CC63F','#2AA9E0','#A93FD1','#F2B01E','#E03127','#37C2A6'];
-  var ON_DARK = ['#FFFFFF','#1B3A05','#FFFFFF','#FFFFFF','#4A3200','#FFFFFF','#053029'];
 
   // Cada grupo vira "qtd" casas físicas na roleta, todas com o mesmo peso.
   // tipo: 'WIN' (prêmio), 'RETRY' (tente outra vez) ou 'FAIL' (sem prêmio).
   // 20 casas no total → chance do Brinde = 1/20 (5%) exata.
+  // Grupos WIN e RETRY têm uma cor fixa (customizável pelo usuário) aplicada a
+  // todas as suas casas. Grupos FAIL recebem cores geradas automaticamente,
+  // uma por casa, nunca repetidas entre si nem com as cores customizadas.
   var TIPOS = ['WIN', 'RETRY', 'FAIL'];
   var grupos = [
-    {nome:'Tente outra vez', peso:1, qtd:2,  tipo:'RETRY'},
-    {nome:'Brinde',          peso:1, qtd:1,  tipo:'WIN'},
+    {nome:'Tente outra vez', peso:1, qtd:2,  tipo:'RETRY', cor:'#2AA9E0'},
+    {nome:'Brinde',          peso:1, qtd:1,  tipo:'WIN',   cor:'#F2B01E'},
     {nome:'Sem prêmio',      peso:1, qtd:17, tipo:'FAIL'}
   ];
 
@@ -280,34 +286,97 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   function chance(i){ var t=total(); return t>0 ? pesoGrupo(grupos[i])/t : 0; }
   function fmt(n,d){ return n.toFixed(d).replace('.',','); }
 
-  // Grupos com identidade própria (WIN, RETRY) mantêm uma cor fixa da paleta.
-  // Só grupos do tipo FAIL recebem cores aleatórias por casa — como todas as
-  // casas desse tipo dão o mesmo resultado (nada), variar a cor evita o bloco
-  // monótono de uma cor só, sem prejudicar o reconhecimento dos outros tipos.
-  // A cor de cada casa é gerada uma vez e fica estável entre redesenhos; só muda
-  // se a quantidade de casas do grupo mudar.
-  function coresParaGrupo(g, gi){
-    var q = g.qtd>0 ? Math.round(g.qtd) : 0;
-    if (q <= 1 || g.tipo !== 'FAIL') return null;
-    if (!g._cores) g._cores = [];
-    while (g._cores.length < q){
-      var idx = Math.floor(Math.random() * PALETTE.length);
-      if (PALETTE.length > 1 && g._cores.length > 0 && PALETTE[idx] === g._cores[g._cores.length - 1]){
-        idx = (idx + 1) % PALETTE.length;
-      }
-      g._cores.push(PALETTE[idx]);
+  // Grupos WIN e RETRY têm identidade própria: uma cor fixa, escolhida pelo
+  // usuário (ou um padrão da paleta na primeira vez). Grupos FAIL não têm cor
+  // fixa — cada casa física recebe uma cor gerada automaticamente, distribuída
+  // pela roda de matizes (ângulo áureo) para nunca repetir uma cor já usada,
+  // nem entre casas FAIL nem com as cores customizadas de WIN/RETRY.
+  function hslParaHex(h, s, l){
+    s/=100; l/=100;
+    var c = (1 - Math.abs(2*l-1)) * s;
+    var x = c * (1 - Math.abs((h/60) % 2 - 1));
+    var m = l - c/2, r,g,b;
+    if (h<60){r=c;g=x;b=0;} else if (h<120){r=x;g=c;b=0;}
+    else if (h<180){r=0;g=c;b=x;} else if (h<240){r=0;g=x;b=c;}
+    else if (h<300){r=x;g=0;b=c;} else {r=c;g=0;b=x;}
+    function hex(v){ var s=Math.round((v+m)*255).toString(16); return s.length===1 ? '0'+s : s; }
+    return '#'+hex(r)+hex(g)+hex(b);
+  }
+
+  // Luminância relativa aproximada, pra decidir se o texto sobre a cor deve
+  // ser claro ou escuro — funciona pra qualquer hex, não só a paleta fixa.
+  function corTextoContraste(hex){
+    var r = parseInt(hex.slice(1,3),16)/255;
+    var g = parseInt(hex.slice(3,5),16)/255;
+    var b = parseInt(hex.slice(5,7),16)/255;
+    var lin = [r,g,b].map(function(c){ return c<=0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); });
+    var L = 0.2126*lin[0] + 0.7152*lin[1] + 0.0722*lin[2];
+    return L > 0.55 ? '#1B1B1B' : '#FFFFFF';
+  }
+
+  function corPadraoDisponivel(reservadas){
+    for (var i=0; i<PALETTE.length; i++){
+      if (reservadas.indexOf(PALETTE[i]) === -1) return PALETTE[i];
     }
-    g._cores.length = q;
-    return g._cores;
+    return gerarCoresDistintas(1, reservadas)[0];
+  }
+
+  // Gera n cores espalhadas pelo círculo de matizes usando o ângulo áureo
+  // (137.508°), o que evita repetição entre si; varia saturação/luz a cada
+  // passo pra dar mais variedade visual. Se uma cor colidir com uma já
+  // reservada (ex.: a cor customizada de um grupo WIN/RETRY), ela é ajustada
+  // até deixar de colidir.
+  function gerarCoresDistintas(n, reservadas){
+    var usadas = (reservadas || []).slice();
+    var offset = Math.random() * 360;
+    var out = [];
+    for (var i=0; i<n; i++){
+      var hue = (offset + i * 137.508) % 360;
+      var sat = 62 + (i % 3) * 8;
+      var lum = 46 + ((i + 1) % 3) * 8;
+      var cor = hslParaHex(hue, sat, lum);
+      var tentativas = 0;
+      while (usadas.indexOf(cor) !== -1 && tentativas < 12){
+        hue = (hue + 23) % 360;
+        cor = hslParaHex(hue, sat, lum);
+        tentativas++;
+      }
+      usadas.push(cor);
+      out.push(cor);
+    }
+    return out;
+  }
+
+  // Garante que todo grupo WIN/RETRY tenha uma cor fixa e que todo grupo FAIL
+  // tenha cores por casa, geradas sem repetir nenhuma cor já em uso na roleta.
+  // As cores FAIL ficam em cache (g._cores) e só são recalculadas quando a
+  // quantidade de casas muda ou quando alguma delas passa a colidir com uma
+  // cor customizada.
+  function sincronizarCores(){
+    var reservadas = [];
+    grupos.forEach(function(g){
+      if (g.tipo === 'FAIL') return;
+      if (!g.cor) g.cor = corPadraoDisponivel(reservadas);
+      reservadas.push(g.cor);
+    });
+    grupos.forEach(function(g){
+      if (g.tipo !== 'FAIL') return;
+      var q = g.qtd>0 ? Math.round(g.qtd) : 0;
+      var colide = g._cores && g._cores.some(function(c){ return reservadas.indexOf(c) !== -1; });
+      if (!g._cores || g._cores.length !== q || colide){
+        g._cores = gerarCoresDistintas(q, reservadas);
+      }
+      reservadas = reservadas.concat(g._cores);
+    });
   }
 
   function expandirGrupos(){
     var out = [];
     grupos.forEach(function(g, gi){
       var q = g.qtd>0 ? Math.round(g.qtd) : 0;
-      var cores = coresParaGrupo(g, gi);
       for (var k=0; k<q; k++){
-        out.push({nome:g.nome, peso:(g.peso>0?g.peso:0), grupo:gi, cor: cores ? cores[k] : PALETTE[gi % PALETTE.length]});
+        var cor = g.tipo === 'FAIL' ? (g._cores && g._cores[k]) : g.cor;
+        out.push({nome:g.nome, peso:(g.peso>0?g.peso:0), grupo:gi, cor: cor || '#888888'});
       }
     });
     return out;
@@ -435,20 +504,21 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   }
 
   function sincronizarRoleta(){
+    sincronizarCores();
     var prop = elProp.checked;
     itens = expandirGrupos();
     wheel.items = itens.map(function(it){
-      var pi = PALETTE.indexOf(it.cor);
       return {
         label: it.nome || ' ',
         weight: prop ? Math.max(it.peso, 0.0001) : 1,
         backgroundColor: it.cor,
-        labelColor: ON_DARK[pi >= 0 ? pi % ON_DARK.length : it.grupo % ON_DARK.length]
+        labelColor: corTextoContraste(it.cor)
       };
     });
   }
 
   function corRepresentativa(g, gi){
+    if (g.tipo !== 'FAIL') return g.cor || PALETTE[gi % PALETTE.length];
     return (g._cores && g._cores.length) ? g._cores[0] : PALETTE[gi % PALETTE.length];
   }
 
@@ -485,10 +555,25 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
       var row = document.createElement('div');
       row.className = 'row';
 
-      coresParaGrupo(g, i);
-      var sw = document.createElement('div');
-      sw.className = 'swatch';
-      sw.style.background = corRepresentativa(g, i);
+      var sw;
+      if (g.tipo === 'FAIL'){
+        sw = document.createElement('div');
+        sw.className = 'swatch';
+        sw.style.background = corRepresentativa(g, i);
+        sw.title = 'Cor gerada automaticamente para cada casa';
+      } else {
+        sw = document.createElement('input');
+        sw.type = 'color';
+        sw.className = 'swatch';
+        sw.value = g.cor || corRepresentativa(g, i);
+        sw.setAttribute('aria-label', 'Cor da casa ' + (i+1));
+        sw.addEventListener('input', function(){
+          g.cor = sw.value;
+          sincronizarRoleta();
+          desenharLampadas();
+          desenharTally();
+        });
+      }
 
       var nome = document.createElement('input');
       nome.type = 'text';
@@ -606,8 +691,8 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   }
 
   function redesenharTudo(){
-    desenharItens();
     sincronizarRoleta();
+    desenharItens();
     desenharLampadas();
     desenharTally();
   }
