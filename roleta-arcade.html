@@ -370,16 +370,39 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
     });
   }
 
+  function embaralhar(arr){
+    for (var i = arr.length - 1; i > 0; i--){
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+
+  // Espalha as casas pela roleta em vez de deixá-las agrupadas por categoria
+  // (senão todas as casas de um mesmo grupo ficam lado a lado). A ordem
+  // embaralhada é mantida em cache e só é recalculada quando a quantidade de
+  // casas de algum grupo muda — assim, editar nome/peso/cor não reembaralha
+  // a roleta a cada tecla digitada.
+  var _ordemCache = null;
+
   function expandirGrupos(){
-    var out = [];
+    var natural = [];
     grupos.forEach(function(g, gi){
       var q = g.qtd>0 ? Math.round(g.qtd) : 0;
       for (var k=0; k<q; k++){
         var cor = g.tipo === 'FAIL' ? (g._cores && g._cores[k]) : g.cor;
-        out.push({nome:g.nome, peso:(g.peso>0?g.peso:0), grupo:gi, cor: cor || '#888888'});
+        natural.push({nome:g.nome, peso:(g.peso>0?g.peso:0), grupo:gi, cor: cor || '#888888'});
       }
     });
-    return out;
+
+    var chave = grupos.map(function(g){ return g.qtd>0 ? Math.round(g.qtd) : 0; }).join(',');
+    if (!_ordemCache || _ordemCache.chave !== chave || _ordemCache.ordem.length !== natural.length){
+      _ordemCache = {
+        chave: chave,
+        ordem: embaralhar(natural.map(function(_, idx){ return idx; }))
+      };
+    }
+    return _ordemCache.ordem.map(function(idx){ return natural[idx]; });
   }
 
   // Som do pino: sintetizado no navegador (Web Audio API), sem arquivo de áudio.
