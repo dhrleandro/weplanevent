@@ -119,17 +119,19 @@
   .headrow .c{width:54px;text-align:right;flex:none}
   .headrow .d{width:26px;flex:none}
   .headrow .e{width:66px;text-align:right;flex:none}
+  .headrow .f{width:78px;flex:none}
 
   .row{display:flex;gap:7px;align-items:center;margin-bottom:7px}
   .swatch{width:12px;height:25px;border-radius:3px;flex:none}
-  .row input{
+  .row input, .row select{
     font:inherit;font-size:.87rem;padding:6px 8px;border-radius:6px;
     border:1px solid var(--hair);background:#1B1F2B;color:var(--ink);
   }
   .row input[type=text]{flex:1 1 auto;min-width:0}
   .row input[type=number]{width:62px;flex:none;text-align:right;font-variant-numeric:tabular-nums}
   .row input[type=number].qtd{width:66px}
-  .row input:focus{outline:2px solid #7FD1FF;outline-offset:0}
+  .row select.tipo{width:78px;flex:none}
+  .row input:focus, .row select:focus{outline:2px solid #7FD1FF;outline-offset:0}
   .pct{width:54px;flex:none;text-align:right;font-size:.82rem;color:var(--gold);font-variant-numeric:tabular-nums}
   button{font:inherit;cursor:pointer;border-radius:7px}
   .kill{
@@ -191,8 +193,8 @@
 
   <section>
     <h2>Casas e chances</h2>
-    <p class="note">Peso relativo e quantidade de casas iguais. Ex.: peso 1 e quantidade 17 cria 17 casas idênticas na roleta sem precisar repetir a linha. Todas as fatias têm o mesmo tamanho na tela, mas cada uma sai com a chance que você definir.</p>
-    <div class="headrow"><div class="a">Casa</div><div class="b">Peso</div><div class="e">Qtd</div><div class="c">Chance</div><div class="d"></div></div>
+    <p class="note">Peso relativo e quantidade de casas iguais. Ex.: peso 1 e quantidade 17 cria 17 casas idênticas na roleta sem precisar repetir a linha. Tipo define se a casa é prêmio (WIN), tente outra vez (RETRY) ou sem prêmio (FAIL). Todas as fatias têm o mesmo tamanho na tela, mas cada uma sai com a chance que você definir.</p>
+    <div class="headrow"><div class="a">Casa</div><div class="f">Tipo</div><div class="b">Peso</div><div class="e">Qtd</div><div class="c">Chance</div><div class="d"></div></div>
     <div id="items"></div>
     <button class="add" id="add">Adicionar casa</button>
     <label class="check">
@@ -248,11 +250,13 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   var ON_DARK = ['#FFFFFF','#1B3A05','#FFFFFF','#FFFFFF','#4A3200','#FFFFFF','#053029'];
 
   // Cada grupo vira "qtd" casas físicas na roleta, todas com o mesmo peso.
+  // tipo: 'WIN' (prêmio), 'RETRY' (tente outra vez) ou 'FAIL' (sem prêmio).
   // 20 casas no total → chance do Brinde = 1/20 (5%) exata.
+  var TIPOS = ['WIN', 'RETRY', 'FAIL'];
   var grupos = [
-    {nome:'Tente outra vez', peso:1, qtd:2},
-    {nome:'Brinde',          peso:1, qtd:1},
-    {nome:'Sem prêmio',      peso:1, qtd:17}
+    {nome:'Tente outra vez', peso:1, qtd:2,  tipo:'RETRY'},
+    {nome:'Brinde',          peso:1, qtd:1,  tipo:'WIN'},
+    {nome:'Sem prêmio',      peso:1, qtd:17, tipo:'FAIL'}
   ];
 
   var itens = [];    // casas físicas expandidas a partir de grupos (1 por fatia da roleta)
@@ -276,20 +280,15 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
   function chance(i){ var t=total(); return t>0 ? pesoGrupo(grupos[i])/t : 0; }
   function fmt(n,d){ return n.toFixed(d).replace('.',','); }
 
-  // Grupos com identidade própria (ex.: Brinde, Tente outra vez) mantêm uma cor
-  // fixa da paleta. Só o grupo "Sem prêmio" recebe cores aleatórias por casa —
-  // como todas as casas dão o mesmo resultado (nada), variar a cor evita o bloco
-  // monótono de uma cor só sem prejudicar o reconhecimento dos outros prêmios.
+  // Grupos com identidade própria (WIN, RETRY) mantêm uma cor fixa da paleta.
+  // Só grupos do tipo FAIL recebem cores aleatórias por casa — como todas as
+  // casas desse tipo dão o mesmo resultado (nada), variar a cor evita o bloco
+  // monótono de uma cor só, sem prejudicar o reconhecimento dos outros tipos.
   // A cor de cada casa é gerada uma vez e fica estável entre redesenhos; só muda
   // se a quantidade de casas do grupo mudar.
-  function ehGrupoSemPremio(g){
-    var n = (g.nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
-    return n === 'sem premio';
-  }
-
   function coresParaGrupo(g, gi){
     var q = g.qtd>0 ? Math.round(g.qtd) : 0;
-    if (q <= 1 || !ehGrupoSemPremio(g)) return null;
+    if (q <= 1 || g.tipo !== 'FAIL') return null;
     if (!g._cores) g._cores = [];
     while (g._cores.length < q){
       var idx = Math.floor(Math.random() * PALETTE.length);
@@ -431,10 +430,13 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
     if (gi>=0 && gi<contagem.length) contagem[gi] += n;
   }
 
+  var PREFIXO_TIPO = {WIN:'🎉 ', RETRY:'🔁 ', FAIL:''};
+
   function mostrar(wheelIndex){
     var gi = itens[wheelIndex] ? itens[wheelIndex].grupo : -1;
+    var g = gi>=0 ? grupos[gi] : null;
     elVerdict.innerHTML = '<b></b><span></span>';
-    elVerdict.querySelector('b').textContent = gi>=0 ? (grupos[gi].nome || 'sem nome') : '—';
+    elVerdict.querySelector('b').textContent = g ? ((PREFIXO_TIPO[g.tipo] || '') + (g.nome || 'sem nome')) : '—';
     elVerdict.querySelector('span').textContent = gi>=0 ? 'chance configurada: ' + fmt(chance(gi)*100, 2) + '%' : '';
   }
 
@@ -458,6 +460,22 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
         sincronizarRoleta();
         desenharLampadas();
         desenharTally();
+      });
+
+      var tipo = document.createElement('select');
+      tipo.className = 'tipo';
+      TIPOS.forEach(function(t){
+        var opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        if (g.tipo === t) opt.selected = true;
+        tipo.append(opt);
+      });
+      tipo.setAttribute('aria-label','Tipo da casa ' + (i+1));
+      tipo.addEventListener('change', function(){
+        g.tipo = tipo.value;
+        delete g._cores;
+        redesenharTudo();
       });
 
       var peso = document.createElement('input');
@@ -504,7 +522,7 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
         redesenharTudo();
       });
 
-      row.append(sw, nome, peso, qtd, pct, kill);
+      row.append(sw, nome, tipo, peso, qtd, pct, kill);
       elItems.append(row);
     });
     atualizarPercentuais();
@@ -572,7 +590,7 @@ var spinWheel=(()=>{var R=Object.defineProperty;var H=Object.getOwnPropertyDescr
 
   document.getElementById('add').addEventListener('click', function(){
     if (girando) return;
-    grupos.push({nome:'Casa ' + (grupos.length+1), peso:1, qtd:1});
+    grupos.push({nome:'Casa ' + (grupos.length+1), peso:1, qtd:1, tipo:'FAIL'});
     contagem.push(0);
     redesenharTudo();
   });
